@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Winking Owl Audits API - Mock Version
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 256
+    Runtime: nodejs20.x
+    Environment:
+      Variables:
+        NODE_ENV: production
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    Description: Deployment stage (dev, staging, prod)
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID for authorization
+    Default: ''
+
+Resources:
+  # API Gateway
+  AuditsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: winking-owl-audits-api
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+        MaxAge: "'3600'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
+            Identity:
+              Header: Authorization
+              ReauthorizeEvery: 0
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: Winking Owl Audits API
+          version: '1.0'
+        paths:
+          /audits:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAuditsFunction.Arn}/invocations'
+              responses:
+                '200':
+                  description: Success
+          /audits/{auditId}:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAuditByIdFunction.Arn}/invocations'
+              parameters:
+                - name: auditId
+                  in: path
+                  required: true
+                  type: string
+              responses:
+                '200':
+                  description: Success
+                '404':
+                  description: Not Found
+          /audits/{auditId}/candles:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetCandlesFunction.Arn}/invocations'
+              parameters:
+                - name: auditId
+                  in: path
+                  required: true
+                  type: string
+                - name: range
+                  in: query
+                  required: true
+                  type: string
+                  enum: ['1H', '1D', '1W', '1M', '3M', '1Y']
+              responses:
+                '200':
+                  description: Success
+                '400':
+                  description: Bad Request
+                '404':
+                  description: Not Found
+
+  # Lambda Functions
+  GetAuditsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'winking-owl-get-audits-${Stage}'
+      CodeUri: functions/get-audits/
+      Handler: index.handler
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuditsApi
+            Path: /audits
+            Method: get
+
+  GetAuditByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'winking-owl-get-audit-by-id-${Stage}'
+      CodeUri: functions/get-audit-by-id/
+      Handler: index.handler
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuditsApi
+            Path: /audits/{auditId}
+            Method: get
+
+  GetCandlesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'winking-owl-get-candles-${Stage}'
+      CodeUri: functions/get-candles/
+      Handler: index.handler
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AuditsApi
+            Path: /audits/{auditId}/candles
+            Method: get
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${AuditsApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/'
+  GetAuditsFunctionArn:
+    Description: Get Audits Function ARN
+    Value: !GetAtt GetAuditsFunction.Arn
+  GetAuditByIdFunctionArn:
+    Description: Get Audit By ID Function ARN
+    Value: !GetAtt GetAuditByIdFunction.Arn
+  GetCandlesFunctionArn:
+    Description: Get Candles Function ARN
+    Value: !GetAtt GetCandlesFunction.Arn
