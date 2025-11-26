@@ -110,6 +110,11 @@ Resources:
             RestApiId: !Ref AuditsApi
             Path: /audits
             Method: get
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - index.ts
 
   GetAuditByIdFunction:
     Type: AWS::Serverless::Function
@@ -124,6 +129,11 @@ Resources:
             RestApiId: !Ref AuditsApi
             Path: /audits/{auditId}
             Method: get
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - index.ts
 
   GetCandlesFunction:
     Type: AWS::Serverless::Function
@@ -138,6 +148,11 @@ Resources:
             RestApiId: !Ref AuditsApi
             Path: /audits/{auditId}/candles
             Method: get
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - index.ts
 
 Outputs:
   ApiUrl:

@@ -11,12 +11,12 @@ parallel = true
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
-region = "us-east-1"
+region = "eu-west-1"
 resolve_s3 = true
 s3_prefix = "winking-owl-audits-api"
 parameter_overrides = [
     "Stage=dev",
-    "CognitoUserPoolId=YOUR_COGNITO_USER_POOL_ID"
+    "CognitoUserPoolId=eu-west-1_AzbMRkxFU"
 ]
 
 [default.package.parameters]
@@ -33,10 +33,10 @@ parallel = true
 [production.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
-region = "us-east-1"
+region = "eu-west-1"
 resolve_s3 = true
 s3_prefix = "winking-owl-audits-api"
 parameter_overrides = [
     "Stage=prod",
-    "CognitoUserPoolId=YOUR_COGNITO_USER_POOL_ID"
+    "CognitoUserPoolId=eu-west-1_AzbMRkxFU"
 ]
