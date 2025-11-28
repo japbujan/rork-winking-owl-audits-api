@@ -97,6 +97,43 @@ export const handler = async (
       };
     }
 
+    /**
+     * Calcula un multiplicador de error basado en patrones típicos
+     */
+    function getErrorPatternMultiplier(date: Date, auditId: string): number {
+      const hour = date.getHours();
+      const dayOfWeek = date.getDay();
+      
+      let multiplier = 1.0;
+      
+      if (hour >= 9 && hour <= 11) {
+        multiplier = 1.5 + Math.random() * 0.5;
+      } else if (hour >= 14 && hour <= 16) {
+        multiplier = 1.3 + Math.random() * 0.4;
+      } else if (hour >= 22 || hour <= 6) {
+        multiplier = 0.3 + Math.random() * 0.3;
+      } else {
+        multiplier = 0.8 + Math.random() * 0.4;
+      }
+      
+      if (dayOfWeek === 1) {
+        multiplier *= 1.4;
+      } else if (dayOfWeek === 5 && hour >= 15 && hour <= 17) {
+        multiplier *= 1.6;
+      } else if (dayOfWeek === 0 || dayOfWeek === 6) {
+        multiplier *= 0.5;
+      }
+      
+      const auditHash = auditId.charCodeAt(0) % 10;
+      const hourOffset = (auditHash + hour) % 24;
+      
+      if (hourOffset >= 10 && hourOffset <= 12) {
+        multiplier *= 1.2;
+      }
+      
+      return multiplier;
+    }
+
     // Generar velas
     const { count, intervalMs } = RANGE_CONFIG[range];
     const now = Date.now();
@@ -107,33 +144,60 @@ export const handler = async (
     let trendMultiplier: number;
     switch (trendDirection) {
       case 'up':
-        trendMultiplier = 0.001; // Tendencia positiva (mejorando)
+        trendMultiplier = 0.001;
         break;
       case 'down':
-        trendMultiplier = -0.001; // Tendencia negativa (empeorando)
+        trendMultiplier = -0.001;
         break;
       case 'neutral':
-        trendMultiplier = 0; // Sin tendencia (plano)
+        trendMultiplier = 0;
         break;
     }
 
+    // Crear períodos con incidentes concentrados
+    const incidentPeriods: number[] = [];
+    const numIncidents = Math.floor(count * 0.15);
+    for (let i = 0; i < numIncidents; i++) {
+      incidentPeriods.push(Math.floor(Math.random() * count));
+    }
+
     for (let i = count - 1; i >= 0; i--) {
-      const timestamp = new Date(now - i * intervalMs).toISOString();
-      const variance = (Math.random() - 0.5) * 0.1;
-      // Aplicar tendencia según la dirección determinada
+      const timestamp = new Date(now - i * intervalMs);
+      const date = new Date(timestamp);
+      
+      const hasIncident = incidentPeriods.includes(i);
+      const errorMultiplier = getErrorPatternMultiplier(date, auditId);
+      
+      let variance = (Math.random() - 0.5) * 0.015;
+      
+      if (hasIncident) {
+        variance -= 0.03 + Math.random() * 0.02;
+      }
+      
       const trend = (count - i) * trendMultiplier;
 
       const open = Math.max(0, Math.min(1, baseSuccessRate + variance));
       const close = Math.max(
         0,
-        Math.min(1, baseSuccessRate + variance + trend + (Math.random() - 0.5) * 0.05)
+        Math.min(1, baseSuccessRate + variance + trend + (Math.random() - 0.5) * 0.01)
       );
-      const high = Math.min(1, Math.max(open, close) + Math.random() * 0.03);
-      const low = Math.max(0, Math.min(open, close) - Math.random() * 0.03);
-      const failures = Math.floor(Math.random() * 5);
+      const high = Math.min(1, Math.max(open, close) + Math.random() * 0.01);
+      const low = Math.max(0, Math.min(open, close) - Math.random() * 0.01);
+
+      let failures = 0;
+      const failureRate = 1 - close;
+      
+      if (failureRate > 0.01) {
+        const baseFailures = Math.random() < 0.3 ? 1 : 0;
+        failures = Math.floor(baseFailures * errorMultiplier);
+        
+        if (hasIncident) {
+          failures = Math.max(failures, Math.floor(2 + Math.random() * 4));
+        }
+      }
 
       candles.push({
-        timestamp,
+        timestamp: timestamp.toISOString(),
         open: roundToDecimals(open),
         high: roundToDecimals(high),
         low: roundToDecimals(low),
