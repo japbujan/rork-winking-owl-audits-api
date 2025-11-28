@@ -12,6 +12,27 @@ const RANGE_CONFIG: Record<TimeRange, { count: number; intervalMs: number }> = {
   '1Y': { count: 52, intervalMs: 7 * 24 * 60 * 60 * 1000 },
 };
 
+// Función para obtener una tendencia determinística pero variada basada en el auditId
+function getTrendDirection(auditId: string): 'up' | 'down' | 'neutral' {
+  // Usar el último carácter del ID para determinar tendencia de forma determinística
+  const lastChar = auditId[auditId.length - 1];
+  let num = parseInt(lastChar, 10);
+  
+  if (isNaN(num)) {
+    // Si no es un número, usar hash simple del string
+    let hash = 0;
+    for (let i = 0; i < auditId.length; i++) {
+      hash = auditId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    num = Math.abs(hash) % 10;
+  }
+  
+  // Distribución: 40% arriba, 40% abajo, 20% neutro
+  if (num < 4) return 'up';
+  if (num < 8) return 'down';
+  return 'neutral';
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
@@ -81,10 +102,26 @@ export const handler = async (
     const now = Date.now();
     const candles: Candle[] = [];
 
+    // Determinar dirección de tendencia
+    const trendDirection = getTrendDirection(auditId);
+    let trendMultiplier: number;
+    switch (trendDirection) {
+      case 'up':
+        trendMultiplier = 0.001; // Tendencia positiva (mejorando)
+        break;
+      case 'down':
+        trendMultiplier = -0.001; // Tendencia negativa (empeorando)
+        break;
+      case 'neutral':
+        trendMultiplier = 0; // Sin tendencia (plano)
+        break;
+    }
+
     for (let i = count - 1; i >= 0; i--) {
       const timestamp = new Date(now - i * intervalMs).toISOString();
       const variance = (Math.random() - 0.5) * 0.1;
-      const trend = (count - i) * 0.001; // Tendencia positiva hacia el presente
+      // Aplicar tendencia según la dirección determinada
+      const trend = (count - i) * trendMultiplier;
 
       const open = Math.max(0, Math.min(1, baseSuccessRate + variance));
       const close = Math.max(
