@@ -123,11 +123,6 @@ Resources:
             RestApiId: !Ref AuditsApi
             Path: /audits
             Method: get
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints:
-          - index.ts
 
   GetAuditByIdFunction:
     Type: AWS::Serverless::Function
