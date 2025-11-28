@@ -16,7 +16,7 @@ resolve_s3 = true
 s3_prefix = "winking-owl-audits-api"
 parameter_overrides = [
     "Stage=dev",
-    "CognitoUserPoolId=eu-west-1_AzbMRkxFU"
+    "CognitoUserPoolArn=arn:aws:cognito-idp:eu-west-1:980508671241:userpool/eu-west-1_AzbMRkxFU"
 ]
 
 [default.package.parameters]
@@ -38,5 +38,5 @@ resolve_s3 = true
 s3_prefix = "winking-owl-audits-api"
 parameter_overrides = [
     "Stage=prod",
-    "CognitoUserPoolId=eu-west-1_AzbMRkxFU"
+    "CognitoUserPoolArn=arn:aws:cognito-idp:eu-west-1:980508671241:userpool/eu-west-1_AzbMRkxFU"
 ]

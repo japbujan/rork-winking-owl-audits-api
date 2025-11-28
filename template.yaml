@@ -16,39 +16,48 @@ Parameters:
     Type: String
     Default: dev
     Description: Deployment stage (dev, staging, prod)
-  CognitoUserPoolId:
+  CognitoUserPoolArn:
     Type: String
-    Description: Cognito User Pool ID for authorization
-    Default: ''
+    Description: Cognito User Pool ARN for authorization (must exist, not created by this stack)
+    # Note: This User Pool must exist before deploying. It is NOT created by this stack.
+    # Using ARN directly to avoid early validation issues with User Pool ID
+    Default: 'arn:aws:cognito-idp:eu-west-1:980508671241:userpool/eu-west-1_AzbMRkxFU'
 
 Resources:
   # API Gateway
   AuditsApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: winking-owl-audits-api
+      # Name must be unique per stage to avoid conflicts between dev/prod stacks
+      Name: !Sub 'winking-owl-audits-api-${Stage}'
       StageName: !Ref Stage
       Cors:
         AllowMethods: "'GET,OPTIONS'"
         AllowHeaders: "'Content-Type,Authorization'"
         AllowOrigin: "'*'"
         MaxAge: "'3600'"
-      Auth:
-        DefaultAuthorizer: CognitoAuthorizer
-        Authorizers:
-          CognitoAuthorizer:
-            UserPoolArn: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
-            Identity:
-              Header: Authorization
-              ReauthorizeEvery: 0
       DefinitionBody:
         swagger: '2.0'
         info:
           title: Winking Owl Audits API
           version: '1.0'
+        # Security definitions - references existing Cognito User Pool (NOT created by this stack)
+        # Note: security is defined per endpoint, not globally (API Gateway OpenAPI 2.0 limitation)
+        securityDefinitions:
+          CognitoAuthorizer:
+            type: apiKey
+            name: Authorization
+            in: header
+            x-amazon-apigateway-authtype: cognito_user_pools
+            x-amazon-apigateway-authorizer:
+              type: cognito_user_pools
+              providerARNs:
+                - !Ref CognitoUserPoolArn
         paths:
           /audits:
             get:
+              security:
+                - CognitoAuthorizer: []
               x-amazon-apigateway-integration:
                 httpMethod: POST
                 type: aws_proxy
@@ -58,6 +67,8 @@ Resources:
                   description: Success
           /audits/{auditId}:
             get:
+              security:
+                - CognitoAuthorizer: []
               x-amazon-apigateway-integration:
                 httpMethod: POST
                 type: aws_proxy
@@ -74,6 +85,8 @@ Resources:
                   description: Not Found
           /audits/{auditId}/candles:
             get:
+              security:
+                - CognitoAuthorizer: []
               x-amazon-apigateway-integration:
                 httpMethod: POST
                 type: aws_proxy
