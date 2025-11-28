@@ -1,7 +1,7 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { Candle, TimeRange, ApiResponse } from '../../shared/types';
+import { PeriodData, TimeRange, ApiResponse } from '../../shared/types';
 import { BASE_SUCCESS_RATES } from '../../shared/mock-data';
-import { roundToDecimals, getCorsHeaders } from '../../shared/utils';
+import { getCorsHeaders } from '../../shared/utils';
 
 const RANGE_CONFIG: Record<TimeRange, { count: number; intervalMs: number }> = {
   '1H': { count: 12, intervalMs: 5 * 60 * 1000 },
@@ -134,20 +134,20 @@ export const handler = async (
       return multiplier;
     }
 
-    // Generar velas
+    // Generar períodos de datos
     const { count, intervalMs } = RANGE_CONFIG[range];
     const now = Date.now();
-    const candles: Candle[] = [];
+    const periods: PeriodData[] = [];
 
     // Determinar dirección de tendencia
     const trendDirection = getTrendDirection(auditId);
     let trendMultiplier: number;
     switch (trendDirection) {
       case 'up':
-        trendMultiplier = 0.001;
+        trendMultiplier = 0.001; // Mejora gradual
         break;
       case 'down':
-        trendMultiplier = -0.001;
+        trendMultiplier = -0.001; // Empeora gradualmente
         break;
       case 'neutral':
         trendMultiplier = 0;
@@ -161,6 +161,17 @@ export const handler = async (
       incidentPeriods.push(Math.floor(Math.random() * count));
     }
 
+    // Base de muestras por período según el rango
+    const baseSamplesPerPeriod: Record<TimeRange, number> = {
+      '1H': 50,   // ~50 ejecuciones cada 5 minutos
+      '1D': 120,  // ~120 ejecuciones cada hora
+      '1W': 200,  // ~200 ejecuciones cada 4 horas
+      '1M': 300,  // ~300 ejecuciones por día
+      '3M': 500,  // ~500 ejecuciones por día
+      '1Y': 1000, // ~1000 ejecuciones por semana
+    };
+    const baseSamples = baseSamplesPerPeriod[range] || 100;
+
     for (let i = count - 1; i >= 0; i--) {
       const timestamp = new Date(now - i * intervalMs);
       const date = new Date(timestamp);
@@ -168,54 +179,61 @@ export const handler = async (
       const hasIncident = incidentPeriods.includes(i);
       const errorMultiplier = getErrorPatternMultiplier(date, auditId);
       
-      let variance = (Math.random() - 0.5) * 0.015;
+      // Variación en successRate
+      let variance = (Math.random() - 0.5) * 0.015; // ±0.75%
       
       if (hasIncident) {
-        variance -= 0.03 + Math.random() * 0.02;
+        variance -= 0.03 + Math.random() * 0.02; // -3% a -5% (más errores)
       }
       
+      // Aplicar tendencia
       const trend = (count - i) * trendMultiplier;
-
-      const open = Math.max(0, Math.min(1, baseSuccessRate + variance));
-      const close = Math.max(
-        0,
-        Math.min(1, baseSuccessRate + variance + trend + (Math.random() - 0.5) * 0.01)
-      );
-      const high = Math.min(1, Math.max(open, close) + Math.random() * 0.01);
-      const low = Math.max(0, Math.min(open, close) - Math.random() * 0.01);
-
-      let failures = 0;
-      const failureRate = 1 - close;
       
-      if (failureRate > 0.01) {
-        const baseFailures = Math.random() < 0.3 ? 1 : 0;
-        failures = Math.floor(baseFailures * errorMultiplier);
-        
-        if (hasIncident) {
-          failures = Math.max(failures, Math.floor(2 + Math.random() * 4));
-        }
-      }
+      // Calcular successRate para este período
+      const successRate = Math.max(0, Math.min(1, baseSuccessRate + variance + trend));
+      const failureRate = 1 - successRate;
 
-      candles.push({
+      // Calcular número de muestras (variación según hora del día y patrones)
+      // Horas pico tienen más muestras
+      const hour = date.getHours();
+      let samplesMultiplier = 1.0;
+      if (hour >= 9 && hour <= 11) {
+        samplesMultiplier = 1.5 + Math.random() * 0.3; // 1.5-1.8x
+      } else if (hour >= 14 && hour <= 16) {
+        samplesMultiplier = 1.3 + Math.random() * 0.2; // 1.3-1.5x
+      } else if (hour >= 22 || hour <= 6) {
+        samplesMultiplier = 0.4 + Math.random() * 0.2; // 0.4-0.6x
+      } else {
+        samplesMultiplier = 0.9 + Math.random() * 0.2; // 0.9-1.1x
+      }
+      
+      const samples = Math.max(1, Math.floor(baseSamples * samplesMultiplier * (0.8 + Math.random() * 0.4)));
+
+      // Calcular failures de forma coherente: failures = samples * failureRate
+      // Añadir variación aleatoria pequeña para simular realidad
+      const expectedFailures = samples * failureRate;
+      const failures = Math.max(0, Math.round(expectedFailures + (Math.random() - 0.5) * 0.1 * samples));
+      
+      // Asegurar que failures no exceda samples
+      const finalFailures = Math.min(failures, samples);
+
+      periods.push({
         timestamp: timestamp.toISOString(),
-        open: roundToDecimals(open),
-        high: roundToDecimals(high),
-        low: roundToDecimals(low),
-        close: roundToDecimals(close),
-        failures,
+        samples,
+        failures: finalFailures,
       });
     }
 
     const response: ApiResponse<{
       auditId: string;
       range: TimeRange;
-      candles: Candle[];
+      periods: PeriodData[];
     }> = {
       success: true,
       data: {
         auditId,
         range,
-        candles,
+        periods,
       },
       timestamp: new Date().toISOString(),
     };

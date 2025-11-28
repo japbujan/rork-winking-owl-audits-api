@@ -11,6 +11,20 @@ export interface Audit {
   lastUpdate: string;
 }
 
+/**
+ * Datos de un período de tiempo con muestras y fallos
+ * Permite calcular successRate = (samples - failures) / samples
+ * y failureRate = failures / samples
+ */
+export interface PeriodData {
+  timestamp: string; // ISO 8601 timestamp (UTC), inicio del período
+  samples: number;   // Número total de ejecuciones/muestras en el período
+  failures: number;  // Número de fallos en el período
+}
+
+/**
+ * @deprecated Usar PeriodData en su lugar. Mantenido para compatibilidad temporal.
+ */
 export interface Candle {
   timestamp: string;
   open: number;
