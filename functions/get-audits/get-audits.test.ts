@@ -7,7 +7,9 @@ describe('GetAuditsFunction', () => {
     path: '/audits',
     pathParameters: null,
     queryStringParameters: null,
-    headers: {},
+    headers: {
+      Authorization: 'Bearer test-id-token',
+    },
     multiValueHeaders: {},
     body: null,
     isBase64Encoded: false,
@@ -49,7 +51,22 @@ describe('GetAuditsFunction', () => {
     stageVariables: null,
   });
 
-  it('should return list of audits', async () => {
+  beforeEach(() => {
+    (global as any).fetch = jest.fn();
+  });
+
+  it('should return filtered audits mapped from upstream service', async () => {
+    const mockUpstreamResponse = [
+      { id: '1', name: 'B audit', isInTracking: true },
+      { id: '2', name: 'A audit', isInTracking: false },
+      { id: '3', name: 'C audit', isInTracking: true },
+    ];
+
+    (global as any).fetch.mockResolvedValue({
+      ok: true,
+      json: async () => mockUpstreamResponse,
+    });
+
     const event = createMockEvent();
     const result = await handler(event);
 
@@ -59,54 +76,59 @@ describe('GetAuditsFunction', () => {
     const body = JSON.parse(result.body);
     expect(body.success).toBe(true);
     expect(body.data).toBeDefined();
-    expect(body.data.audits).toBeDefined();
     expect(Array.isArray(body.data.audits)).toBe(true);
-    expect(body.data.audits.length).toBe(8);
-    expect(body.timestamp).toBeDefined();
-  });
 
-  it('should return audits with correct structure', async () => {
-    const event = createMockEvent();
-    const result = await handler(event);
-
-    const body = JSON.parse(result.body);
-    const audit = body.data.audits[0];
-
-    expect(audit).toHaveProperty('id');
-    expect(audit).toHaveProperty('name');
-    expect(audit).toHaveProperty('status');
-    expect(audit).toHaveProperty('successRate');
-    expect(audit).toHaveProperty('executions');
-    expect(audit).toHaveProperty('failures');
-    expect(audit).toHaveProperty('lastUpdate');
-
-    expect(['ok', 'fail', 'error']).toContain(audit.status);
-    expect(audit.successRate).toBeGreaterThanOrEqual(0);
-    expect(audit.successRate).toBeLessThanOrEqual(1);
-    expect(audit.executions).toBeGreaterThan(0);
-    expect(audit.failures).toBeGreaterThanOrEqual(0);
-  });
-
-  it('should return audits sorted alphabetically', async () => {
-    const event = createMockEvent();
-    const result = await handler(event);
-
-    const body = JSON.parse(result.body);
     const audits = body.data.audits;
+    // Solo los elementos con isInTracking === true
+    expect(audits.length).toBe(2);
 
-    for (let i = 1; i < audits.length; i++) {
-      expect(audits[i].name.localeCompare(audits[i - 1].name)).toBeGreaterThanOrEqual(0);
+    const [first, second] = audits;
+
+    // Deben venir ordenados alfabéticamente por name
+    expect(first.name).toBe('B audit');
+    expect(second.name).toBe('C audit');
+
+    // Estructura y valores por defecto
+    for (const audit of audits) {
+      expect(audit).toHaveProperty('id');
+      expect(audit).toHaveProperty('name');
+      expect(audit).toHaveProperty('status', 'ok');
+      expect(audit).toHaveProperty('successRate', 1);
+      expect(audit).toHaveProperty('executions', 0);
+      expect(audit).toHaveProperty('failures', 0);
+      expect(audit).toHaveProperty('lastUpdate');
     }
   });
 
-  it('should handle errors gracefully', async () => {
-    // Simular un error forzando un problema
-    const event = createMockEvent();
-    // Modificar event para causar un error si es necesario
-    // Por ahora, el handler debería funcionar correctamente
+  it('should return 401 when Authorization header is missing', async () => {
+    const event: APIGatewayProxyEvent = {
+      ...createMockEvent(),
+      headers: {},
+    };
 
     const result = await handler(event);
-    expect(result.statusCode).toBe(200); // Debería funcionar normalmente
+    expect(result.statusCode).toBe(401);
+
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UNAUTHORIZED');
+  });
+
+  it('should return 502 when upstream service fails', async () => {
+    (global as any).fetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'Internal error',
+    });
+
+    const event = createMockEvent();
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(502);
+
+    const body = JSON.parse(result.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('UPSTREAM_ERROR');
   });
 });
 

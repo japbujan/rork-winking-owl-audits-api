@@ -7,7 +7,7 @@
     "build": "sam build",
     "deploy": "sam deploy",
     "deploy:dev": "sam deploy --stack-name winking-owl-audits-api-dev",
-    "deploy:prod": "sam deploy --stack-name winking-owl-audits-api-prod",
+    "deploy:prod": "sam deploy --config-env production --no-confirm-changeset",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

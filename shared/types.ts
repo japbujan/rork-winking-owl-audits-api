@@ -12,6 +12,19 @@ export interface Audit {
 }
 
 /**
+ * Representa una auditoría/ruta devuelta por la API web de Winking Owl
+ * (GET /route-service/route). En esta primera versión solo usamos id y name,
+ * pero definimos la interfaz mínima para poder tipar la integración.
+ */
+export interface WebRouteAudit {
+  id: string;
+  name: string;
+  isInTracking?: boolean;
+  // Campos adicionales de la API web que no usamos todavía
+  [key: string]: unknown;
+}
+
+/**
  * Datos de un período de tiempo con muestras y fallos
  * Permite calcular successRate = (samples - failures) / samples
  * y failureRate = failures / samples
